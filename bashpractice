@@ -1,0 +1,426 @@
+#!/bin/bash
+
+#Jonathan Baldwin
+#CS344 Winter 2019
+#Program 1
+
+
+#trap to capture sigint and exit, removing any temp files
+trap "rm -f tempInFile$$ 
+      rm -f tempCalc$$
+      rm -f tempCol$$
+      rm -f tempOutput$$
+      rm -f tempOutFile$$
+      rm -f TMPoutput$$
+      rm -f TMP1rc$$
+      rm -f TMP2rc$$
+      rm -f TMPinTransp$$
+      echo 'ctrl-c received - exiting.'
+      exit 8" INT HUP TERM
+
+
+#-----------------------------------------------------------------------------
+#NAME: testvalid - helper function to test if file exists and if its readable. 
+#DESCRIPTION: If not valid or doesn't exist, send message to stderr and
+#             exit non-zero
+#-----------------------------------------------------------------------------
+ 
+testvalid(){
+   #test if file exists, if not send message to stderr and exit 
+   if ! test -e $1
+   then
+      echo "file does not exist" 1>&2
+      exit 1
+   fi
+
+   #test if file is readable, if not send message to stderr and exit
+   if ! test -r $1
+   then 
+      echo "file is not readable" 1>&2
+      exit 2
+   fi
+
+}
+
+
+
+#------------------------------------------------------------------------------
+#NAME: dims - takes a matrix and returns ROW COL count dimensions
+#DESCRIPTION: accepta a matrix via file or stdin and returns dimenions in the
+#             format ROWS COLS
+#------------------------------------------------------------------------------
+
+dims(){
+
+   #accept data from stdin or file via the following if statement
+   #TMPin holds data from stdin or file
+   TMPin="tempInFile$$"
+   #if =0, then data is coming from stdin, save to TMPin for processing
+   if [ "$#" = "0" ] 
+      then
+         cat > "$TMPin"
+   #if =1, data is received via file
+   elif [ "$#" = "1" ]
+      then 
+         #send file to testvalid() to verify it exists and is readable
+         testvalid $1
+         #affter confirming file exists/readable, save to TMP in for processing
+         cat $1 > "$TMPin"
+   else
+      #invalid number of arguments, message to stderr and exit
+      echo "invalid number of arguments" 1>&2
+      exit 3
+   fi
+
+   #declare variables to hold row and col count
+   rows=0
+   cols=0
+
+   #loop through each line to count rows
+   #this loop processes the matrix in TMPin
+   while read lineIn
+   do
+      rows=$(expr $rows + 1)
+   done < $TMPin 
+
+   #iterate through items in first line to count row elements which = cols
+   tempLine=$(head -n 1 $TMPin) 
+   for i in $tempLine
+   do
+      ((cols++))
+   done
+
+   #output to terminal
+   echo $rows $cols   
+
+   #delete temp file
+   rm -f $TMPin
+}
+
+
+
+#------------------------------------------------------------------------------
+#NAME: transpose - takes a matrix and transposes data 
+#DESCRIPTION: accepta a matrix via file or stdin and transposes an MxN matrix
+#             to NxM
+#------------------------------------------------------------------------------
+
+transpose(){
+
+   #accept data from stdin or file via the following if statement
+   #TMPin holds data from stdin or file
+   TMPin="tempInFile$$"
+   #if =0, then data is coming from stdin, save to TMPin for processing
+   if [ "$#" = "0" ] 
+      then
+         cat > "$TMPin"
+   #if =1, data is received via file
+   elif [ "$#" = "1" ]
+      then 
+         #send file to testvalid() to verify it exists and is readable
+         testvalid $1
+         #affter confirming file exists/readable, save to TMP in for processing
+         cat $1 > "$TMPin"
+   else
+      #invalid number of arguments, error message to stderr and exit
+      echo "invalid number of arguments" 1>&2
+      exit 3
+   fi
+
+   #TMP to hold transposed matrix
+   TMP="tempOutput$$"
+
+   #count columns from first line, used to transpose matrix below
+   cols=0
+   tempLine=$(head -n 1 $TMPin) 
+   for i in $tempLine
+   do
+      ((cols++))
+   done 
+
+   count=0
+   field=1     #increment each loop to cut the next field each iteration
+   #Loop while count does not equal cols 
+   #cut first field (ie, column) then send to TMP, and transfer space to tab
+   while test $count -ne $cols
+   do
+      tempCol=$(cut -f $field $TMPin) 
+      echo $tempCol | tr ' ' '\t' >> $TMP
+      ((count++))
+      ((field++))
+   done < $TMPin 
+
+   #output tranposed file
+   cat $TMP
+
+   #remove temp files
+   rm -f $TMP
+   rm -f $TMPin
+}
+
+
+
+mean(){
+
+   #accept data from stdin or file via the following if statement
+   #TMPin holds data from stdin or file
+   TMPin="tempInFile$$"
+   #if =0, then data is coming from stdin, save to TMPin for processing
+   if [ "$#" = "0" ] 
+      then
+         cat > "$TMPin"
+   #if =1, data is received via file
+   elif [ "$#" = "1" ]
+      then 
+         #send file to testvalid() to verify it exists and is readable
+         testvalid $1
+         #affter confirming file exists/readable, save to TMP in for processing
+         cat $1 > "$TMPin"
+   else
+      #invalid number of arguments, error message to stderr and exit
+      echo "invalid number of arguments" 1>&2
+      exit 3
+   fi
+
+   #TMP to hold values to be averaged 
+   TMP="tempCalc$$"
+
+   #TMPcol holds the initial mean values in a col format
+   TMPcol="tempCol$$"
+
+   #TMPout holds the final output means in a row format (single row)
+   TMPout="tempOutFile$$"
+
+   #count columns from first line, used to count number of cols to calc mean 
+   cols=0
+   tempLine=$(head -n 1 $TMPin) 
+   for i in $tempLine
+   do
+      ((cols++))
+   done 
+   
+   #for each column, calculate sum then average and output to tempOut file
+   for i in $(seq 1 $cols)
+   do
+      sum=0
+      avg=0
+      count=0        #add as each number is summed, to calc average of nums
+      #cut field and save to TMP file used to sum values
+      tempCol=$(cut -f $i $TMPin) 
+      echo $tempCol | tr ' ' '\n' >> $TMP
+      ((field++))
+
+      #sum column and calucalte average
+      while read numIn
+      do
+         sum=`expr $sum + $numIn`
+         ((count++))     
+      done < $TMP
+     
+      #Citation: avg formula from assignment guidelines 
+      avg=$(((sum + (count/2)*( (sum>0)*2-1 )) / count))
+      echo $avg >> $TMPcol
+      
+      #clear TMP file contents for next iteration
+      > $TMP   
+
+   done
+
+   #transform TMPcol file to row format in TMPout file, cut last tab, add newline
+   cat $TMPcol | tr '\n' '\t' | head -c -1 >> $TMPout
+   echo >> $TMPout
+ 
+   #output mean results 
+   cat $TMPout
+   
+   #remove temp files
+   rm -f $TMP
+   rm -f $TMPin
+   rm -f $TMPcol
+   rm -f $TMPout
+}
+
+
+
+#------------------------------------------------------------------------------
+#NAME: add - adds two MxN matrices with same dimensions 
+#DESCRIPTION: receives two MxN matrices via file. Compares each matrix to 
+#             confirm dimensions are equal, and if so, adds the values of each
+#             matrix. Output summed matrix result. 
+#------------------------------------------------------------------------------
+
+add(){
+
+   #Test for valid number of arguments (2), and if each of those files exists
+   #and is readable. If any test fails, send message to stderr and exit nonzero
+   if [ "$#" = "2" ]
+      then
+         testvalid $1
+         testvalid $2
+      else
+         echo "invalid number of arguments" 1>&2
+         exit 4
+   fi 
+
+   #two temp files to hold each input file dimensions for comparison
+   TMP1rc="TMP1rc$$"
+   TMP2rc="TMP2rc$$"   
+
+   #call dims to get dimensions and save in temp files
+   dims $1 > $TMP1rc
+   dims $2 > $TMP2rc
+
+   #compare dimensions, if not the same, send to message stderr, exit non-zero
+   if !(cmp -s $TMP1rc $TMP2rc)
+      then
+         rm -f $TMP1rc
+         rm -f $TMP2rc
+         echo "dimension are not equal" 1>&2
+         exit 5   
+   fi
+
+   #get column count, for iteration through each value in a row
+   cols=0
+   tempLine=$(head -n 1 $1)
+   for i in $tempLine
+   do
+      ((cols++))
+   done
+
+   #iterate through each line of each file and add corresponding elements
+   #save to output file
+   TMPout="TMPoutput$$"
+   
+   #reads a line from each of the two files
+   #Citation: reading two file from Canvas post, B. Brewter
+   while read line1 <&3 && read line2 <&4
+   do
+      for i in $(seq 1 $cols)
+      do
+         val1=$(echo $line1 | cut -f $i -d ' ')
+         val2=$(echo $line2 | cut -f $i -d ' ')
+         sum=$((val1 + val2))
+         echo -n $sum >> $TMPout
+         #enters proper tabs, without trailing tab
+         if [[ $i -lt $cols ]]
+            then
+               echo -n -e '\t' >> $TMPout
+         fi
+      done
+      echo >> $TMPout
+   done 3<$1 4<$2
+
+   cat $TMPout
+
+   #remove temp files
+   rm -f $TMP1rc
+   rm -f $TMP2rc
+   rm -f $TMPout
+
+}
+
+
+#------------------------------------------------------------------------------
+#NAME: multiply - multiplies two matrices 
+#DESCRIPTION: accepts two files in the format MxN and NxP. If the format is not 
+#             valid, exit. If valid, multiple matrices and output MxP matrix.
+#------------------------------------------------------------------------------
+
+multiply(){
+
+   #Test for valid number of arguments (2), and if each of those files exists
+   #and is readable. If any test fails, send message to stderr and exit nonzero
+   if [ "$#" = "2" ]
+      then
+         testvalid $1
+         testvalid $2
+      else
+         echo "invalid number of arguments" 1>&2
+         exit 6 
+   fi 
+
+   #declare variables to hold row and col count
+   file1c=0
+   file2r=0
+   file2c=0  
+
+   #iterate through items in first line to count row elements which = cols
+   tempLine=$(head -n 1 $1) 
+   for i in $tempLine
+   do
+      ((file1c++))
+   done
+
+   tempLine=$(head -n 1 $2) 
+   for i in $tempLine
+   do
+      ((file2c++))
+   done
+
+   #loop through each line to count rows
+   while read lineIn
+   do
+      file2r=$(expr $file2r + 1)
+   done < $2 
+
+   #test to confirm valid matrices MxN and NxP, if not exit
+   if [[ $file1c -ne $file2r ]]
+      then
+         echo "not equal matrices" 1>&2
+         exit 7
+   fi
+
+   #temp files, one to hold a transposed NxP matrix, other holds output
+   TMPinTransp="TMPinTransp$$"
+   TMPout="TMPoutput$$"
+
+   #transpose NxP matrix to ease calculation 
+   transpose $2 > $TMPinTransp
+
+   #the following loops do matrix multiplication
+   #while loop iterates over each row in the first input file
+   while read line1In 
+   do
+      count=1
+      #iterates over each row in the second, transposed input file
+      while read line2In
+      do
+         prodSum=0
+         #iterate for each col count in the orginal second file input
+         for i in $(seq 1 $file2c)
+         do
+            #during for loop iteration, save each succesive field
+            #using the i var in for loop, to cut the val and 
+            #save to a var. var1 and var2 are multiplied and saved in
+            #prod var, and each prod is summed to get the prodSum
+            #which is the output for each set of calculations.
+            val1=$(echo $line1In | cut -f $i -d ' ')
+            val2=$(echo $line2In | cut -f $i -d ' ')   
+            prod=$((val1 * val2))
+            prodSum=$((prodSum + prod))
+         done
+        
+         #output prodSum to output file after each calc for loop 
+         echo -n $prodSum >> $TMPout
+
+         #add tab after each output prodSum, without trailing tab at line end
+         if [[ $count -lt $file2c ]]
+            then
+               echo -n -e '\t' >> $TMPout
+            else
+               echo >> $TMPout
+         fi
+         ((count++))
+      done < $TMPinTransp
+   done < $1
+
+   #output file results
+   cat $TMPout
+
+   #remove temp files
+   rm -f $TMPinTransp
+   rm -f $TMPout
+}
+
+
+$1 "${@:2}"
