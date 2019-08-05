@@ -418,4 +418,5 @@ multiply(){
 }
 
 
+#expand cmd line. arg 1 = function call, remaining args passed to function. ex. dims file1 file2
 $1 "${@:2}"
