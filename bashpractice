@@ -1,10 +1,5 @@
 #!/bin/bash
 
-#Jonathan Baldwin
-#CS344 Winter 2019
-#Program 1
-
-
 #trap to capture sigint and exit, removing any temp files
 trap "rm -f tempInFile$$ 
       rm -f tempCalc$$
